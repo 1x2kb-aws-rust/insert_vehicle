@@ -13,7 +13,7 @@ use vehicle::Vehicle;
 async fn function_handler(event: LambdaEvent<SnsEvent>) -> Result<(), Error> {
     println!("Raw event: \n{:#?}", &event);
     let (sns_event, _context) = event.into_parts();
-    
+
     let parsed_vehicles: Vec<Vehicle> = sns_event
         .records
         .into_iter()
