@@ -1,6 +1,9 @@
+mod vehicle;
+
 use aws_lambda_events::event::sns::SnsEvent;
 use base64::{engine::general_purpose, Engine};
 use lambda_runtime::{run, service_fn, Error, LambdaEvent};
+use vehicle::Vehicle;
 
 /// This is the main body for the function.
 /// Write your code inside it.
@@ -8,20 +11,21 @@ use lambda_runtime::{run, service_fn, Error, LambdaEvent};
 /// - https://github.com/awslabs/aws-lambda-rust-runtime/tree/main/examples
 /// - https://github.com/aws-samples/serverless-rust-demo/
 async fn function_handler(event: LambdaEvent<SnsEvent>) -> Result<(), Error> {
+    println!("Raw event: \n{:#?}", &event);
     let (sns_event, _context) = event.into_parts();
-    let data: Vec<String> = sns_event
+    
+    let parsed_vehicles: Vec<Vehicle> = sns_event
         .records
         .into_iter()
-        .map(|base_64_vehicle| {
-            general_purpose::STANDARD
-                .decode(base_64_vehicle.sns.message)
-        })
+        .map(|base_64_vehicle| general_purpose::STANDARD.decode(base_64_vehicle.sns.message))
         .flatten()
         .map(String::from_utf8)
         .flatten()
+        .map(|message_data| serde_json::from_str::<Vehicle>(&message_data))
+        .flatten()
         .collect();
 
-    println!("{:#?}", data);
+    println!("{:#?}", parsed_vehicles);
     Ok(())
 }
 
