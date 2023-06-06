@@ -1,17 +1,8 @@
 use base64::{engine::general_purpose, Engine};
+use vehicle::Vehicle;
 
 mod event;
 mod vehicle;
-
-#[cfg(test)]
-const DECODED_UTF: [u8; 81] = [
-    123, 34, 109, 97, 107, 101, 34, 58, 32, 34, 67, 104, 101, 118, 114, 111, 108, 101, 116, 34, 44,
-    32, 34, 109, 111, 100, 101, 108, 34, 58, 32, 34, 83, 105, 108, 118, 101, 114, 97, 100, 111, 34,
-    44, 32, 34, 109, 111, 100, 101, 108, 95, 121, 101, 97, 114, 34, 58, 32, 34, 50, 48, 50, 50, 34,
-    44, 32, 118, 105, 110, 58, 32, 34, 48, 49, 50, 51, 52, 54, 55, 34, 125,
-];
-#[cfg(test)]
-const PURE_STRING: &str = "{\"make\": \"Chevrolet\", \"model\": \"Silverado\", \"model_year\": \"2022\", vin: \"0123467\"}";
 
 /*
    Steps:
@@ -39,6 +30,22 @@ fn base_64_decode(base_64: String) -> Result<Vec<u8>, base64::DecodeError> {
 fn stringify(decoded: Vec<u8>) -> Result<String, std::string::FromUtf8Error> {
     String::from_utf8(decoded)
 }
+
+fn serialize_vehicle(json_string: String) -> Result<Vehicle, serde_json::Error> {
+    serde_json::from_str(&json_string)
+}
+
+#[cfg(test)]
+const DECODED_UTF: [u8; 81] = [
+    123, 34, 109, 97, 107, 101, 34, 58, 32, 34, 67, 104, 101, 118, 114, 111, 108, 101, 116, 34, 44,
+    32, 34, 109, 111, 100, 101, 108, 34, 58, 32, 34, 83, 105, 108, 118, 101, 114, 97, 100, 111, 34,
+    44, 32, 34, 109, 111, 100, 101, 108, 95, 121, 101, 97, 114, 34, 58, 32, 34, 50, 48, 50, 50, 34,
+    44, 32, 118, 105, 110, 58, 32, 34, 48, 49, 50, 51, 52, 54, 55, 34, 125,
+];
+#[cfg(test)]
+const PURE_STRING: &str = "{\"make\": \"Chevrolet\", \"model\": \"Silverado\", \"model_year\": \"2022\", vin: \"0123467\"}";
+#[cfg(test)]
+const PROPERLY_FORMATTED_JSON: &str = "{\"make\": \"Chevrolet\", \"model\": \"Silverado\", \"modelYear\": \"2022\", \"vin\": \"0123467\"}";
 
 #[cfg(test)]
 mod base_64_should {
@@ -97,5 +104,40 @@ mod stringify_should {
     #[test]
     fn should_return_error_in_invalid() {
         // How do I make this fail? Type checking makes this hard to force a failure.
+    }
+}
+
+#[cfg(test)]
+mod serialize_should {
+    use crate::{vehicle::Vehicle, serialize_vehicle, PURE_STRING, PROPERLY_FORMATTED_JSON};
+
+    #[test]
+    fn serialize_valid_vehicle_json() {
+        let expected = Vehicle {
+            make: "Chevrolet".to_string(),
+            model: "Silverado".to_string(),
+            model_year: "2022".to_string(),
+            vin: "0123467".to_string(),
+        };
+
+        let result = serialize_vehicle(PROPERLY_FORMATTED_JSON.to_string()).unwrap();
+
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn fails_to_parse_incomple_json() {
+        let incomplete_json = "{\"make\": \"Chevrolet\", \"model\": \"Silverado\", \"model_year\": \"2022\"}".to_string();
+
+        let result = serialize_vehicle(incomplete_json);
+
+        assert!(result.is_err(), "Serialized incomplete_json but it shouldn't have");
+    }
+
+    #[test]
+    fn fails_to_parse_snake_case_key() {
+        let result = serialize_vehicle(PURE_STRING.to_string());
+
+        assert!(result.is_err(), "Serialized JSON string but shouldn't have");
     }
 }
