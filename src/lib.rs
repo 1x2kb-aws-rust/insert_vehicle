@@ -39,6 +39,13 @@ fn serialize_vehicle(json_string: String) -> Result<Vehicle, serde_json::Error> 
     serde_json::from_str(&json_string)
 }
 
+async fn get_database(mongo_uri: String) -> mongodb::error::Result<Database> {
+    let mut client_options = ClientOptions::parse(mongo_uri).await?;
+    let server_api = ServerApi::builder().version(ServerApiVersion::V1).build();
+    client_options.server_api = Some(server_api);
+    Client::with_options(client_options).map(|client| client.database("main"))
+}
+
 #[cfg(test)]
 const DECODED_UTF: [u8; 81] = [
     123, 34, 109, 97, 107, 101, 34, 58, 32, 34, 67, 104, 101, 118, 114, 111, 108, 101, 116, 34, 44,
@@ -151,4 +158,25 @@ mod serialize_should {
     }
 }
 
+#[cfg(test)]
+mod get_database_should {
+    use super::get_database;
 
+    #[tokio::test]
+    #[ignore]
+    async fn establishes_connection() {
+        dotenvy::dotenv().ok();
+
+        let value = get_database(std::env::var("MONGO_URI").expect("No MONGO_URI was set")).await;
+
+        assert!(value.is_ok());
+    }
+
+    #[tokio::test]
+    #[ignore]
+    async fn not_establish_connection() {
+        let value = get_database("some_random_string".to_string()).await;
+
+        assert!(value.is_err())
+    }
+}
