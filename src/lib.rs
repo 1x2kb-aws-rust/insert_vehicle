@@ -1,4 +1,8 @@
 use base64::{engine::general_purpose, Engine};
+use mongodb::{
+    options::{ClientOptions, ServerApi, ServerApiVersion},
+    Client, Database,
+};
 use vehicle::Vehicle;
 
 mod event;
@@ -109,7 +113,7 @@ mod stringify_should {
 
 #[cfg(test)]
 mod serialize_should {
-    use crate::{vehicle::Vehicle, serialize_vehicle, PURE_STRING, PROPERLY_FORMATTED_JSON};
+    use crate::{serialize_vehicle, vehicle::Vehicle, PROPERLY_FORMATTED_JSON, PURE_STRING};
 
     #[test]
     fn serialize_valid_vehicle_json() {
@@ -127,11 +131,16 @@ mod serialize_should {
 
     #[test]
     fn fails_to_parse_incomple_json() {
-        let incomplete_json = "{\"make\": \"Chevrolet\", \"model\": \"Silverado\", \"model_year\": \"2022\"}".to_string();
+        let incomplete_json =
+            "{\"make\": \"Chevrolet\", \"model\": \"Silverado\", \"model_year\": \"2022\"}"
+                .to_string();
 
         let result = serialize_vehicle(incomplete_json);
 
-        assert!(result.is_err(), "Serialized incomplete_json but it shouldn't have");
+        assert!(
+            result.is_err(),
+            "Serialized incomplete_json but it shouldn't have"
+        );
     }
 
     #[test]
@@ -141,3 +150,5 @@ mod serialize_should {
         assert!(result.is_err(), "Serialized JSON string but shouldn't have");
     }
 }
+
+
