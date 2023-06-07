@@ -1,7 +1,7 @@
 use base64::{engine::general_purpose, Engine};
 use mongodb::{
     options::{ClientOptions, ServerApi, ServerApiVersion},
-    Client, Database,
+    Client, Collection, Database,
 };
 use vehicle::Vehicle;
 
@@ -44,6 +44,18 @@ async fn get_database(mongo_uri: String) -> mongodb::error::Result<Database> {
     let server_api = ServerApi::builder().version(ServerApiVersion::V1).build();
     client_options.server_api = Some(server_api);
     Client::with_options(client_options).map(|client| client.database("main"))
+}
+
+async fn insert_vehicles(
+    vehicle: impl Iterator<Item = &Vehicle>,
+    collection: Collection<Vehicle>,
+) -> mongodb::error::Result<Vec<String>> {
+    collection.insert_many(vehicle, None).await.map(|map| {
+        map.inserted_ids
+            .into_values()
+            .map(|bson| bson.to_string())
+            .collect()
+    })
 }
 
 #[cfg(test)]
@@ -178,5 +190,33 @@ mod get_database_should {
         let value = get_database("some_random_string".to_string()).await;
 
         assert!(value.is_err())
+    }
+}
+
+#[cfg(test)]
+mod insert_vehicle_should {
+    use dotenvy::dotenv;
+
+    use crate::{
+        get_database, insert_vehicles,
+        vehicle::{Random, Vehicle},
+    };
+
+    #[tokio::test]
+    #[ignore]
+    async fn insert_random_vehicles() {
+        dotenv().ok();
+
+        let vehicles: Vec<Vehicle> = (0..2).into_iter().map(|_| Vehicle::random()).collect();
+
+        let collection =
+            get_database(std::env::var("MONGO_URI").expect("Failed to find MONGO_URI env"))
+                .await
+                .expect("Failed to establish a db connection")
+                .collection::<Vehicle>("test_vehicle");
+
+        let insert_many_result = insert_vehicles(vehicles.iter(), collection).await.unwrap();
+
+        assert_eq!(insert_many_result.len(), vehicles.len());
     }
 }
