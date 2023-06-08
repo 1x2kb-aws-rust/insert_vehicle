@@ -989,6 +989,7 @@ dependencies = [
  "dotenvy",
  "lambda_runtime",
  "mongodb",
+ "rand",
  "serde",
  "serde_json",
  "tokio",
