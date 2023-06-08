@@ -1,10 +1,11 @@
 use aws_lambda_events::sns::MessageAttribute;
+use aws_sdk_sns::config::Region;
 use base64::{engine::general_purpose, Engine};
 use event::MessageAttributes;
 use insert_completed_message::InsertCompletedMessage;
 use mongodb::{
     options::{ClientOptions, ServerApi, ServerApiVersion},
-    Client, Collection, Database,
+    Client as MongoClient, Collection, Database,
 };
 use std::collections::HashMap;
 use uuid::Uuid;
@@ -48,7 +49,7 @@ async fn get_database(mongo_uri: String) -> mongodb::error::Result<Database> {
     let mut client_options = ClientOptions::parse(mongo_uri).await?;
     let server_api = ServerApi::builder().version(ServerApiVersion::V1).build();
     client_options.server_api = Some(server_api);
-    Client::with_options(client_options).map(|client| client.database("main"))
+    MongoClient::with_options(client_options).map(|client| client.database("main"))
 }
 
 async fn insert_vehicles(
@@ -86,6 +87,12 @@ fn serialize_insert_completed(
     message: InsertCompletedMessage,
 ) -> Result<String, serde_json::Error> {
     serde_json::to_string(&message)
+}
+
+fn get_region() -> Region {
+    std::env::var("REGION")
+        .map(Region::new)
+        .unwrap_or(Region::new("us-east-2"))
 }
 
 #[cfg(test)]
@@ -446,5 +453,30 @@ mod serialize_insert_completed_should {
     #[test]
     fn error_when() {
         // TODO: How do I make this fail? Strong type checking makes this difficult
+    }
+}
+
+#[cfg(test)]
+mod get_region_should {
+    use crate::get_region;
+
+    #[test]
+    fn extract_region_from_env() {
+        let region = "test-region".to_string();
+
+        std::env::set_var("REGION", &region);
+
+        let result = get_region();
+
+        assert_eq!(result.to_string(), region);
+    }
+
+    #[test]
+    fn default_to_us_east_2() {
+        let expected = "us-east-2";
+
+        let result = get_region();
+
+        assert_eq!(result.to_string(), expected);
     }
 }
