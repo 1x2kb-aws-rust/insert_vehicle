@@ -1,5 +1,10 @@
 use aws_lambda_events::sns::MessageAttribute;
-use aws_sdk_sns::{config::Region, Client as SnsClient};
+use aws_sdk_sns::{
+    config::Region,
+    error::SdkError,
+    operation::publish::{PublishError, PublishOutput},
+    Client as SnsClient,
+};
 use base64::{engine::general_purpose, Engine};
 use event::MessageAttributes;
 use insert_completed_message::InsertCompletedMessage;
@@ -105,6 +110,21 @@ async fn get_client(region: Region) -> SnsClient {
 
 fn get_topic() -> String {
     std::env::var("TOPIC_ARN").unwrap_or_default()
+}
+
+async fn send_insert_completed(
+    client: SnsClient,
+    topic: String,
+    serialized_insert_completed: String,
+    message_attributes: MessageAttributes,
+) -> Result<PublishOutput, SdkError<PublishError>> {
+    client
+        .publish()
+        .topic_arn(topic)
+        .message(serialized_insert_completed)
+        .set_message_attributes(Some(message_attributes.to_map()))
+        .send()
+        .await
 }
 
 #[cfg(test)]
@@ -508,10 +528,68 @@ mod get_topic_should {
 
     // Update, should not default but throw an error instead.
     // Using default for now
+    // Sometimes fails because tests are run in parallel and the above test sets TOPIC_ARN.
     #[test]
     fn return_empty_string_as_default() {
         let result = get_topic();
 
         assert_eq!(result, "".to_string());
+    }
+}
+
+#[cfg(test)]
+mod send_insert_completed_should {
+    use uuid::Uuid;
+
+    use crate::{
+        event::MessageAttributes, get_client, get_region, get_topic, send_insert_completed,
+    };
+
+    #[tokio::test]
+    #[ignore]
+    async fn send_message() {
+        dotenvy::dotenv().ok();
+
+        let message = "{\"id\":\"test_id\",\"success\":true,\"messages\":[\"successfully inserted vehicle\"],\"errors\":[],\"warnings\":[]}".to_string();
+        let message_attributes = MessageAttributes {
+            event_id: Uuid::new_v4().to_string(),
+            event_type: "test_insert_vehicle_completed".to_string(),
+            resource_id: Some(Uuid::new_v4().to_string()),
+            source_event_id: Some(Uuid::new_v4().to_string()),
+            source_event_type: Some("test_insert_vehicle_requested".to_string()),
+        };
+
+        let result = send_insert_completed(
+            get_client(get_region()).await,
+            get_topic(),
+            message,
+            message_attributes,
+        )
+        .await;
+
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    #[ignore]
+    async fn fail_when_topic_is_invalid() {
+        let message = "{\"id\":\"test_id\",\"success\":true,\"messages\":[\"successfully inserted vehicle\"],\"errors\":[],\"warnings\":[]}".to_string();
+        let message_attributes = MessageAttributes {
+            event_id: Uuid::new_v4().to_string(),
+            event_type: "test_insert_vehicle_completed".to_string(),
+            resource_id: Some(Uuid::new_v4().to_string()),
+            source_event_id: Some(Uuid::new_v4().to_string()),
+            source_event_type: Some("test_insert_vehicle_requested".to_string()),
+        };
+
+        let result = send_insert_completed(
+            get_client(get_region()).await,
+            "".to_string(),
+            message,
+            message_attributes,
+        )
+        .await;
+
+        assert!(result.is_err());
     }
 }
