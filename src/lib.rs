@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+use aws_lambda_events::sns::MessageAttribute;
 use base64::{engine::general_purpose, Engine};
 use mongodb::{
     options::{ClientOptions, ServerApi, ServerApiVersion},
@@ -56,6 +58,12 @@ async fn insert_vehicles(
             .map(|bson| bson.to_string())
             .collect()
     })
+}
+
+fn parse_message_attributes(
+    attributes: HashMap<String, MessageAttribute>,
+) -> event::MessageAttributes {
+    event::MessageAttributes::from(attributes)
 }
 
 #[cfg(test)]
@@ -218,5 +226,114 @@ mod insert_vehicle_should {
         let insert_many_result = insert_vehicles(vehicles.iter(), collection).await.unwrap();
 
         assert_eq!(insert_many_result.len(), vehicles.len());
+    }
+}
+
+#[cfg(test)]
+mod parse_message_attributes_should {
+
+    use std::collections::HashMap;
+
+    use aws_lambda_events::sns::MessageAttribute;
+
+    use crate::{event::MessageAttributes, parse_message_attributes};
+
+    #[test]
+    fn parse_message_attributes_from_map() {
+        let map = create_attribute_map();
+        let map_clone = map.clone();
+
+        let expected = MessageAttributes {
+            event_id: map
+                .get("eventId")
+                .map(|c| c.value.to_string())
+                .unwrap_or_default(),
+            event_type: map
+                .get("eventType")
+                .map(|c| c.value.to_string())
+                .unwrap_or_default(),
+            resource_id: map.get("resourceId").map(|c| c.value.to_string()),
+            source_event_id: map.get("sourceEventId").map(|c| c.value.to_string()),
+            source_event_type: map.get("sourceEventType").map(|c| c.value.to_string()),
+            source_event_domain: map.get("sourceEventDomain").map(|c| c.value.to_string()),
+        };
+
+        let message_attributes = parse_message_attributes(map_clone);
+        assert_eq!(message_attributes, expected);
+    }
+
+    #[test]
+    fn parses_when_no_source_id() {
+        let mut map = create_attribute_map();
+        map.remove("sourceEventId").unwrap();
+        let map_clone = map.clone();
+
+        let expected = MessageAttributes {
+            event_id: map
+                .get("eventId")
+                .map(|c| c.value.to_string())
+                .unwrap_or_default(),
+            event_type: map
+                .get("eventType")
+                .map(|c| c.value.to_string())
+                .unwrap_or_default(),
+            resource_id: map.get("resourceId").map(|c| c.value.to_string()),
+            source_event_id: None,
+            source_event_type: map.get("sourceEventType").map(|c| c.value.to_string()),
+            source_event_domain: map.get("sourceEventDomain").map(|c| c.value.to_string()),
+        };
+
+        let message_attributes = parse_message_attributes(map_clone);
+
+        assert_eq!(message_attributes, expected);
+    }
+
+    fn create_attribute_map() -> HashMap<String, MessageAttribute> {
+        let event_id = "test_id".to_string();
+        let event_type = "test_type".to_string();
+        let resource_id = "test_resource_id".to_string();
+        let source_event_id = "test_source_event_id".to_string();
+        let source_event_type = "test_source_event_type".to_string();
+        let source_event_domain = "test_source_event_domain".to_string();
+
+        let mut map: HashMap<String, MessageAttribute> = HashMap::new();
+        map.insert(
+            "eventId".to_string(),
+            create_message_attribute(event_id.clone()),
+        );
+
+        map.insert(
+            "eventType".to_string(),
+            create_message_attribute(event_type.clone()),
+        );
+
+        map.insert(
+            "resourceId".to_string(),
+            create_message_attribute(resource_id.clone()),
+        );
+
+        map.insert(
+            "sourceEventId".to_string(),
+            create_message_attribute(source_event_id.clone()),
+        );
+
+        map.insert(
+            "sourceEventType".to_string(),
+            create_message_attribute(source_event_type.clone()),
+        );
+
+        map.insert(
+            "sourceEventDomain".to_string(),
+            create_message_attribute(source_event_domain.clone()),
+        );
+
+        map
+    }
+
+    fn create_message_attribute(value: String) -> MessageAttribute {
+        MessageAttribute {
+            data_type: "String".to_string(),
+            value,
+        }
     }
 }
