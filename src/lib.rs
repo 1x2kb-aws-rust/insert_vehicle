@@ -1,13 +1,16 @@
 use aws_lambda_events::sns::MessageAttribute;
 use base64::{engine::general_purpose, Engine};
+use event::MessageAttributes;
 use mongodb::{
     options::{ClientOptions, ServerApi, ServerApiVersion},
     Client, Collection, Database,
 };
 use std::collections::HashMap;
+use uuid::Uuid;
 use vehicle::Vehicle;
 
 mod event;
+mod insert_completed_message;
 mod vehicle;
 
 /*
@@ -63,6 +66,19 @@ fn parse_message_attributes(
     attributes: HashMap<String, MessageAttribute>,
 ) -> event::MessageAttributes {
     event::MessageAttributes::from(attributes)
+}
+
+fn create_insert_completed(
+    inserted_vehicle_id: &str,
+    source_event: &MessageAttributes,
+) -> MessageAttributes {
+    MessageAttributes {
+        event_id: Uuid::new_v4().to_string(),
+        event_type: "insert_vehicle_completed".to_string(),
+        resource_id: Some(inserted_vehicle_id.to_string()),
+        source_event_id: Some(source_event.event_id.to_string()),
+        source_event_type: Some(source_event.event_type.to_string()),
+    }
 }
 
 #[cfg(test)]
@@ -332,5 +348,34 @@ mod parse_message_attributes_should {
             data_type: "String".to_string(),
             value,
         }
+    }
+}
+
+#[cfg(test)]
+mod create_insert_completed_should {
+    use uuid::Uuid;
+
+    use crate::{create_insert_completed, event::MessageAttributes};
+
+    #[test]
+    fn some_function() {
+        let insert_id = Uuid::new_v4().to_string();
+        let insert_vehicle = MessageAttributes {
+            event_id: Uuid::new_v4().to_string(),
+            event_type: "insert_vehicle_requested".to_string(),
+            resource_id: None,
+            source_event_id: None,
+            source_event_type: None,
+        };
+
+        let message_attributes = create_insert_completed(&insert_id, &insert_vehicle);
+        let expected = MessageAttributes {
+            event_id: message_attributes.event_id.to_string(),
+            event_type: "insert_vehicle_completed".to_string(),
+            resource_id: message_attributes.resource_id.clone(),
+            source_event_id: Some(insert_vehicle.event_id.to_string()),
+            source_event_type: Some(insert_vehicle.event_type.to_string()),
+        };
+        assert_eq!(message_attributes, expected);
     }
 }
