@@ -1,6 +1,7 @@
 use aws_lambda_events::sns::MessageAttribute;
 use base64::{engine::general_purpose, Engine};
 use event::MessageAttributes;
+use insert_completed_message::InsertCompletedMessage;
 use mongodb::{
     options::{ClientOptions, ServerApi, ServerApiVersion},
     Client, Collection, Database,
@@ -79,6 +80,12 @@ fn create_insert_completed(
         source_event_id: Some(source_event.event_id.to_string()),
         source_event_type: Some(source_event.event_type.to_string()),
     }
+}
+
+fn serialize_insert_completed(
+    message: InsertCompletedMessage,
+) -> Result<String, serde_json::Error> {
+    serde_json::to_string(&message)
 }
 
 #[cfg(test)]
@@ -377,5 +384,67 @@ mod create_insert_completed_should {
             source_event_type: Some(insert_vehicle.event_type.to_string()),
         };
         assert_eq!(message_attributes, expected);
+    }
+}
+
+#[cfg(test)]
+mod serialize_insert_completed_should {
+    use uuid::Uuid;
+
+    use crate::{insert_completed_message::InsertCompletedMessage, serialize_insert_completed};
+
+    #[test]
+    fn serialize_the_message_happy_path() {
+        let message = InsertCompletedMessage {
+            id: Some("test_id".to_string()),
+            success: true,
+            messages: Vec::from(["successfully inserted vehicle".to_string()]),
+            errors: Vec::new(),
+            warnings: Vec::new(),
+        };
+        let expected = "{\"id\":\"test_id\",\"success\":true,\"messages\":[\"successfully inserted vehicle\"],\"errors\":[],\"warnings\":[]}".to_string();
+
+        let result = serialize_insert_completed(message.clone()).unwrap();
+
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn serialize_the_message_as_error() {
+        let message = InsertCompletedMessage {
+            id: None,
+            success: false,
+            messages: Vec::new(),
+            errors: Vec::from(["Couldn't establish connection to the database".to_string()]),
+            warnings: Vec::new(),
+        };
+
+        let expected ="{\"id\":null,\"success\":false,\"messages\":[],\"errors\":[\"Couldn't establish connection to the database\"],\"warnings\":[]}".to_string();
+
+        let result = serialize_insert_completed(message.clone()).unwrap();
+
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn serialize_the_message_with_warning() {
+        let message = InsertCompletedMessage {
+            id: Some("test_id".to_string()),
+            success: true,
+            messages: Vec::new(),
+            errors: Vec::new(),
+            warnings: Vec::from(["Car with exact same information already inserted".to_string()]),
+        };
+
+        let expected = "{\"id\":\"test_id\",\"success\":true,\"messages\":[],\"errors\":[],\"warnings\":[\"Car with exact same information already inserted\"]}".to_string();
+
+        let result = serialize_insert_completed(message.clone()).unwrap();
+
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn error_when() {
+        // TODO: How do I make this fail? Strong type checking makes this difficult
     }
 }

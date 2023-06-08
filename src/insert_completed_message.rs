@@ -1,9 +1,9 @@
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
 #[serde(rename_all(serialize = "camelCase"))]
 pub struct InsertCompletedMessage {
-    pub id: String,
+    pub id: Option<String>,
     pub success: bool,
     pub messages: Vec<String>,
     pub errors: Vec<String>,
