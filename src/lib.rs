@@ -1,5 +1,5 @@
 use aws_lambda_events::sns::MessageAttribute;
-use aws_sdk_sns::config::Region;
+use aws_sdk_sns::{config::Region, Client as SnsClient};
 use base64::{engine::general_purpose, Engine};
 use event::MessageAttributes;
 use insert_completed_message::InsertCompletedMessage;
@@ -93,6 +93,14 @@ fn get_region() -> Region {
     std::env::var("REGION")
         .map(Region::new)
         .unwrap_or(Region::new("us-east-2"))
+}
+
+// Untested
+async fn get_client(region: Region) -> SnsClient {
+    let shared_config = aws_config::from_env().region(region).load().await;
+    let client = SnsClient::new(&shared_config);
+
+    client
 }
 
 #[cfg(test)]
