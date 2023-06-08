@@ -1,10 +1,10 @@
-use std::collections::HashMap;
 use aws_lambda_events::sns::MessageAttribute;
 use base64::{engine::general_purpose, Engine};
 use mongodb::{
     options::{ClientOptions, ServerApi, ServerApiVersion},
     Client, Collection, Database,
 };
+use std::collections::HashMap;
 use vehicle::Vehicle;
 
 mod event;
@@ -24,8 +24,7 @@ mod vehicle;
                convert from HashMap into known event::MessageAttributes
                return result
            after both:
-               receive tupple of (SQL Insert Result, event::MessageAttributes)
-               Create insert_vehicle_completed events
+               Create insert_vehicle_completed event
                Send insert_vehicle_completed events for each insert_vehicle we recieved -- even errors.
 */
 
@@ -255,7 +254,6 @@ mod parse_message_attributes_should {
             resource_id: map.get("resourceId").map(|c| c.value.to_string()),
             source_event_id: map.get("sourceEventId").map(|c| c.value.to_string()),
             source_event_type: map.get("sourceEventType").map(|c| c.value.to_string()),
-            source_event_domain: map.get("sourceEventDomain").map(|c| c.value.to_string()),
         };
 
         let message_attributes = parse_message_attributes(map_clone);
@@ -280,7 +278,6 @@ mod parse_message_attributes_should {
             resource_id: map.get("resourceId").map(|c| c.value.to_string()),
             source_event_id: None,
             source_event_type: map.get("sourceEventType").map(|c| c.value.to_string()),
-            source_event_domain: map.get("sourceEventDomain").map(|c| c.value.to_string()),
         };
 
         let message_attributes = parse_message_attributes(map_clone);
