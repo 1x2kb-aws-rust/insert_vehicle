@@ -118,7 +118,7 @@ impl MessageAttributes {
         }
     }
 
-    fn set_source_properites(&mut self, source_message: &MessageAttributes) {
+    pub fn set_source_properites(&mut self, source_message: &MessageAttributes) {
         self.source_event_id = Some(source_message.event_id.to_string());
         self.source_event_type = Some(source_message.event_type.to_string());
     }
