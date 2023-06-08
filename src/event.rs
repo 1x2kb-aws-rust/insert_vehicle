@@ -1,25 +1,58 @@
 use std::collections::HashMap;
 
+use aws_lambda_events::sns::MessageAttribute;
 use aws_sdk_sns::types::MessageAttributeValue;
-use uuid::Uuid;
 
+#[derive(Debug, PartialEq)]
 pub struct MessageAttributes {
-    event_id: Uuid,
-    event_type: String,
-    resource_id: Option<String>,
-    source_event_id: Option<String>,
-    source_event_type: Option<String>,
-    source_event_domain: Option<String>,
+    pub event_id: String,
+    pub event_type: String,
+    pub resource_id: Option<String>,
+    pub source_event_id: Option<String>,
+    pub source_event_type: Option<String>,
+}
+
+impl From<HashMap<String, MessageAttribute>> for MessageAttributes {
+    fn from(value: HashMap<String, MessageAttribute>) -> Self {
+        let event_id = value
+            .get("eventId")
+            .map(|message_attribute| message_attribute.value.to_string())
+            .unwrap_or_default();
+
+        let event_type = value
+            .get("eventType")
+            .map(|message_attribute| message_attribute.value.to_string())
+            .unwrap_or_default();
+
+        let resource_id = value
+            .get("resourceId")
+            .map(|message_attribute| message_attribute.value.to_string());
+
+        let source_event_id = value
+            .get("sourceEventId")
+            .map(|message_attribute| message_attribute.value.to_string());
+
+        let source_event_type = value
+            .get("sourceEventType")
+            .map(|message_attribute| message_attribute.value.to_string());
+
+        Self {
+            event_id,
+            event_type,
+            resource_id,
+            source_event_id,
+            source_event_type,
+        }
+    }
 }
 
 impl MessageAttributes {
     pub fn new(
-        event_id: Uuid,
+        event_id: String,
         event_type: String,
         resource_id: Option<String>,
         source_event_id: Option<String>,
         source_event_type: Option<String>,
-        source_event_domain: Option<String>,
     ) -> Self {
         Self {
             event_id,
@@ -27,7 +60,6 @@ impl MessageAttributes {
             resource_id,
             source_event_id,
             source_event_type,
-            source_event_domain,
         }
     }
 
@@ -84,15 +116,10 @@ impl MessageAttributes {
                     .build(),
             );
         }
+    }
 
-        if let Some(source_domain) = &self.source_event_domain {
-            map.insert(
-                "sourceEventDomain".to_string(),
-                MessageAttributeValue::builder()
-                    .data_type("String".to_string())
-                    .string_value(source_domain.to_string())
-                    .build(),
-            );
-        }
+    fn set_source_properites(&mut self, source_message: &MessageAttributes) {
+        self.source_event_id = Some(source_message.event_id.to_string());
+        self.source_event_type = Some(source_message.event_type.to_string());
     }
 }
