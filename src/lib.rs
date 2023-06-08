@@ -103,6 +103,10 @@ async fn get_client(region: Region) -> SnsClient {
     client
 }
 
+fn get_topic() -> String {
+    std::env::var("TOPIC_ARN").unwrap_or_default()
+}
+
 #[cfg(test)]
 const DECODED_UTF: [u8; 81] = [
     123, 34, 109, 97, 107, 101, 34, 58, 32, 34, 67, 104, 101, 118, 114, 111, 108, 101, 116, 34, 44,
@@ -486,5 +490,28 @@ mod get_region_should {
         let result = get_region();
 
         assert_eq!(result.to_string(), expected);
+    }
+}
+
+#[cfg(test)]
+mod get_topic_should {
+    use crate::get_topic;
+
+    #[test]
+    fn return_topic_from_env() {
+        let topic = "test_topic".to_string();
+        std::env::set_var("TOPIC_ARN", &topic);
+        let result = get_topic();
+
+        assert_eq!(result, topic);
+    }
+
+    // Update, should not default but throw an error instead.
+    // Using default for now
+    #[test]
+    fn return_empty_string_as_default() {
+        let result = get_topic();
+
+        assert_eq!(result, "".to_string());
     }
 }
