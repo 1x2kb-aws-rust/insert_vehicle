@@ -1,4 +1,4 @@
-use aws_lambda_events::sns::MessageAttribute;
+use aws_lambda_events::sns::{MessageAttribute, SnsRecord};
 use aws_sdk_sns::{
     config::Region,
     error::SdkError,
@@ -12,7 +12,7 @@ use mongodb::{
     options::{ClientOptions, ServerApi, ServerApiVersion},
     Client as MongoClient, Collection, Database,
 };
-use std::collections::HashMap;
+use std::{collections::HashMap, error::Error};
 use uuid::Uuid;
 use vehicle::Vehicle;
 
@@ -46,7 +46,7 @@ fn stringify(decoded: Vec<u8>) -> Result<String, std::string::FromUtf8Error> {
     String::from_utf8(decoded)
 }
 
-fn serialize_vehicle(json_string: String) -> Result<Vehicle, serde_json::Error> {
+fn deserialize_vehicle(json_string: String) -> Result<Vehicle, serde_json::Error> {
     serde_json::from_str(&json_string)
 }
 
@@ -200,8 +200,8 @@ mod stringify_should {
 }
 
 #[cfg(test)]
-mod serialize_should {
-    use crate::{serialize_vehicle, vehicle::Vehicle, PROPERLY_FORMATTED_JSON, PURE_STRING};
+mod deserialize_should {
+    use crate::{deserialize_vehicle, vehicle::Vehicle, PROPERLY_FORMATTED_JSON, PURE_STRING};
 
     #[test]
     fn serialize_valid_vehicle_json() {
@@ -212,7 +212,7 @@ mod serialize_should {
             vin: "0123467".to_string(),
         };
 
-        let result = serialize_vehicle(PROPERLY_FORMATTED_JSON.to_string()).unwrap();
+        let result = deserialize_vehicle(PROPERLY_FORMATTED_JSON.to_string()).unwrap();
 
         assert_eq!(result, expected);
     }
@@ -223,7 +223,7 @@ mod serialize_should {
             "{\"make\": \"Chevrolet\", \"model\": \"Silverado\", \"model_year\": \"2022\"}"
                 .to_string();
 
-        let result = serialize_vehicle(incomplete_json);
+        let result = deserialize_vehicle(incomplete_json);
 
         assert!(
             result.is_err(),
@@ -233,7 +233,7 @@ mod serialize_should {
 
     #[test]
     fn fails_to_parse_snake_case_key() {
-        let result = serialize_vehicle(PURE_STRING.to_string());
+        let result = deserialize_vehicle(PURE_STRING.to_string());
 
         assert!(result.is_err(), "Serialized JSON string but shouldn't have");
     }
