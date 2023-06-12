@@ -12,31 +12,13 @@ use mongodb::{
     options::{ClientOptions, ServerApi, ServerApiVersion},
     Client as MongoClient, Collection, Database,
 };
-use std::{collections::HashMap, error::Error};
+use std::collections::HashMap;
 use uuid::Uuid;
 use vehicle::Vehicle;
 
 mod event;
 mod insert_completed_message;
 mod vehicle;
-
-/*
-   Steps:
-       Recieve records as Vec<SnsRecord>
-       for each:
-           parse message & message attributes separately (independently unit testable)
-           message:
-               base64 decode
-               serialize to rust types
-               insert data into database
-               return result
-           message attributes:
-               convert from HashMap into known event::MessageAttributes
-               return result
-           after both:
-               Create insert_vehicle_completed event
-               Send insert_vehicle_completed events for each insert_vehicle we recieved -- even errors.
-*/
 
 fn base_64_decode(base_64: String) -> Result<Vec<u8>, base64::DecodeError> {
     general_purpose::STANDARD.decode(base_64)
@@ -75,14 +57,14 @@ fn parse_message_attributes(
     event::MessageAttributes::from(attributes)
 }
 
-fn create_insert_completed(
-    inserted_vehicle_id: &str,
+fn create_insert_completed_attributes(
+    inserted_vehicle_id: Option<String>,
     source_event: &MessageAttributes,
 ) -> MessageAttributes {
     MessageAttributes {
         event_id: Uuid::new_v4().to_string(),
         event_type: "insert_vehicle_completed".to_string(),
-        resource_id: Some(inserted_vehicle_id.to_string()),
+        resource_id: inserted_vehicle_id,
         source_event_id: Some(source_event.event_id.to_string()),
         source_event_type: Some(source_event.event_type.to_string()),
     }
@@ -398,10 +380,10 @@ mod parse_message_attributes_should {
 }
 
 #[cfg(test)]
-mod create_insert_completed_should {
+mod create_insert_completed_attributes_should {
     use uuid::Uuid;
 
-    use crate::{create_insert_completed, event::MessageAttributes};
+    use crate::{create_insert_completed_attributes, event::MessageAttributes};
 
     #[test]
     fn some_function() {
@@ -414,7 +396,8 @@ mod create_insert_completed_should {
             source_event_type: None,
         };
 
-        let message_attributes = create_insert_completed(&insert_id, &insert_vehicle);
+        let message_attributes =
+            create_insert_completed_attributes(Some(insert_id.to_string()), &insert_vehicle);
         let expected = MessageAttributes {
             event_id: message_attributes.event_id.to_string(),
             event_type: "insert_vehicle_completed".to_string(),
@@ -428,8 +411,6 @@ mod create_insert_completed_should {
 
 #[cfg(test)]
 mod serialize_insert_completed_should {
-    use uuid::Uuid;
-
     use crate::{insert_completed_message::InsertCompletedMessage, serialize_insert_completed};
 
     #[test]
