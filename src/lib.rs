@@ -94,6 +94,13 @@ fn get_topic() -> String {
     std::env::var("TOPIC_ARN").unwrap_or_default()
 }
 
+fn base_64_encode(s: &str) -> String {
+    let mut buffer = String::new();
+    general_purpose::STANDARD.encode_string(s, &mut buffer);
+
+    buffer
+}
+
 async fn send_insert_completed(
     client: SnsClient,
     topic: String,
@@ -515,6 +522,31 @@ mod get_topic_should {
         let result = get_topic();
 
         assert_eq!(result, "".to_string());
+    }
+}
+
+#[cfg(test)]
+mod base_64_encode_should {
+    use crate::{base_64_decode, base_64_encode, stringify};
+
+    const EXAMPLE_STR: &str = "{\"id\": null, \"success\": false, \"messages\": [], \"warnings\": [],\"errors\": [\"Failed to encode string, sent fallback string\"]}";
+
+    #[test]
+    fn encode_string() {
+        let expected = "eyJpZCI6IG51bGwsICJzdWNjZXNzIjogZmFsc2UsICJtZXNzYWdlcyI6IFtdLCAid2FybmluZ3MiOiBbXSwiZXJyb3JzIjogWyJGYWlsZWQgdG8gZW5jb2RlIHN0cmluZywgc2VudCBmYWxsYmFjayBzdHJpbmciXX0=".to_string();
+
+        let result = base_64_encode(EXAMPLE_STR);
+
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn encodes_something_decodeable_by_standard() {
+        let result = base_64_encode(EXAMPLE_STR);
+
+        let decoded = stringify(base_64_decode(result.clone()).unwrap()).unwrap();
+
+        assert_eq!(decoded, EXAMPLE_STR.to_string());
     }
 }
 
