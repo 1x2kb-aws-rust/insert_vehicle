@@ -21,6 +21,41 @@ mod event;
 mod insert_completed_message;
 mod vehicle;
 
+fn create_message_and_attributes(
+    vehicle: &str,
+    source_attributes: &MessageAttributes,
+) -> (String, MessageAttributes) {
+    let message = InsertCompletedMessage {
+        id: Some(Uuid::new_v4().to_string()),
+        success: true,
+        payload: Some(vehicle.to_string()),
+        messages: Vec::new(),
+        errors: Vec::new(),
+        warnings: Vec::new(),
+    };
+
+    let message_attributes =
+        create_insert_completed_attributes(message.id.clone(), source_attributes);
+
+    let message = serialize_insert_completed(message).unwrap();
+
+    println!(
+        "Preparing to send message ({},{}) in response to message ({},{})",
+        &message_attributes.event_id,
+        &message_attributes.event_type,
+        message_attributes
+            .source_event_id
+            .clone()
+            .unwrap_or_default(),
+        message_attributes
+            .source_event_type
+            .clone()
+            .unwrap_or_default()
+    );
+
+    (message, message_attributes)
+}
+
 async fn send_error_event(error: String, source_message_atributes: &MessageAttributes) {
     let message_attributes = create_insert_completed_attributes(None, source_message_atributes);
 
