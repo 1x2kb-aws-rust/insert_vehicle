@@ -21,6 +21,61 @@ mod event;
 mod insert_completed_message;
 mod vehicle;
 
+pub async fn execute(sns_records: Vec<SnsRecord>) -> Result<(), ()> {
+    // TODO: Too complex, rewrite.
+    // Get serialize and decode event as sent
+    let vehicle_items: Vec<(Result<Vehicle, String>, MessageAttributes)> = sns_records
+        .into_iter()
+        .map(|sns_record| {
+            let vehicle_result =
+                deserialize_vehicle(sns_record.sns.message).map_err(|e| e.to_string());
+
+            (
+                vehicle_result,
+                MessageAttributes::from(sns_record.sns.message_attributes),
+            )
+        })
+        .collect();
+    println!("Successfully deserialized messages");
+
+    let mut vehicles: Vec<Vehicle> = Vec::new();
+    let mut attributes: Vec<MessageAttributes> = Vec::new();
+    // For those that have errored send an error message. For those that have not
+    // add them to the vectors above to do a bulk insert.
+    for (vehicle_result, source_message_atributes) in vehicle_items.into_iter() {
+        match vehicle_result {
+            Ok(vehicle) => {
+                vehicles.push(vehicle);
+                attributes.push(source_message_atributes)
+            }
+            Err(e) => {
+                println!("Error occurred while deserializing error {}", e);
+                send_error_event(e, &source_message_atributes).await;
+            }
+        }
+    }
+
+    println!("Finished sending errors (if any)");
+
+    println!("Handling vehicles");
+    let serialized_vehicles = insert_vehicles_temp(vehicles.iter());
+    println!("Finished processing vehicles");
+
+    for i in 0..serialized_vehicles.len() {
+        match serialized_vehicles.get(i).unwrap() {
+            Ok(vehicle_str) => {
+                send_completed_message(vehicle_str, attributes.get(i).unwrap()).await;
+            }
+            Err(error) => {
+                println!("Experienced error while serializing vehicle");
+                println!("{}", error);
+            }
+        }
+    }
+
+    Ok(())
+}
+
 async fn send_completed_message(vehicle_str: &str, source_attributes: &MessageAttributes) {
     let (message, message_attributes) =
         create_message_and_attributes(vehicle_str, source_attributes);
