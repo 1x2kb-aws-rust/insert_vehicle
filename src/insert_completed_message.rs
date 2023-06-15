@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 pub struct InsertCompletedMessage {
     pub id: Option<String>,
     pub success: bool,
+    pub payload: Option<String>,
     pub messages: Vec<String>,
     pub errors: Vec<String>,
     pub warnings: Vec<String>,
