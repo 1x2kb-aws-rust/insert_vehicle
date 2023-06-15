@@ -8,10 +8,11 @@ use aws_sdk_sns::{
 use base64::{engine::general_purpose, Engine};
 use event::MessageAttributes;
 use insert_completed_message::InsertCompletedMessage;
-use mongodb::{
-    options::{ClientOptions, ServerApi, ServerApiVersion},
-    Client as MongoClient, Collection, Database,
-};
+// use mongodb::{
+//     options::{ClientOptions, ServerApi, ServerApiVersion},
+//     Client as MongoClient, Collection, Database,
+// };
+use serde_json::Error;
 use std::collections::HashMap;
 use uuid::Uuid;
 use vehicle::Vehicle;
@@ -19,6 +20,39 @@ use vehicle::Vehicle;
 mod event;
 mod insert_completed_message;
 mod vehicle;
+
+async fn send_error_event(error: String, source_message_atributes: &MessageAttributes) {
+    let message_attributes = create_insert_completed_attributes(None, source_message_atributes);
+
+    let message = serialize_insert_completed(InsertCompletedMessage {
+        id: None,
+        success: false,
+        messages: Vec::new(),
+        errors: Vec::from([error]),
+        warnings: Vec::new(),
+        payload: None,
+    })
+    .map_err(|e| e.to_string())
+    .map(|json_string| base_64_encode(&json_string))
+    .unwrap();
+
+    send_insert_completed(
+        get_client(get_region()).await,
+        get_topic(),
+        message,
+        message_attributes,
+    )
+    .await
+    .map(|publish_output| {
+        println!(
+            "published with message id: {}",
+            publish_output.message_id().unwrap_or("")
+        );
+
+        ()
+    })
+    .unwrap_or(());
+}
 
 fn base_64_decode(base_64: String) -> Result<Vec<u8>, base64::DecodeError> {
     general_purpose::STANDARD.decode(base_64)
@@ -32,24 +66,41 @@ fn deserialize_vehicle(json_string: String) -> Result<Vehicle, serde_json::Error
     serde_json::from_str(&json_string)
 }
 
-async fn get_database(mongo_uri: String) -> mongodb::error::Result<Database> {
-    let mut client_options = ClientOptions::parse(mongo_uri).await?;
-    let server_api = ServerApi::builder().version(ServerApiVersion::V1).build();
-    client_options.server_api = Some(server_api);
-    MongoClient::with_options(client_options).map(|client| client.database("main"))
+fn insert_vehicles_temp<'a>(
+    vehicles: impl Iterator<Item = &'a Vehicle>,
+) -> Vec<Result<String, Error>> {
+    vehicles
+        .into_iter()
+        .map(|vehicle| serde_json::to_string(vehicle))
+        .collect()
 }
 
-async fn insert_vehicles(
-    vehicle: impl Iterator<Item = &Vehicle>,
-    collection: Collection<Vehicle>,
-) -> mongodb::error::Result<Vec<String>> {
-    collection.insert_many(vehicle, None).await.map(|map| {
-        map.inserted_ids
-            .into_values()
-            .map(|bson| bson.to_string())
-            .collect()
-    })
-}
+// async fn get_database(mongo_uri: String) -> mongodb::error::Result<Database> {
+//     let mut client_options = ClientOptions::parse(mongo_uri).await?;
+//     let server_api = ServerApi::builder().version(ServerApiVersion::V1).build();
+//     client_options.server_api = Some(server_api);
+//     MongoClient::with_options(client_options).map(|client| client.database("main"))
+// }
+
+// async fn insert_vehicles(
+//     vehicle: impl Iterator<Item = &Vehicle>,
+//     collection: Collection<Vehicle>,
+// ) -> mongodb::error::Result<Vec<String>> {
+//     let start = Instant::now();
+
+//     println!("Beginning insert of vehicles");
+//     let r = collection.insert_many(vehicle, None).await.map(|map| {
+//         map.inserted_ids
+//             .into_values()
+//             .map(|bson| bson.to_string())
+//             .collect()
+//     });
+
+//     let duration = start.elapsed();
+//     println!("{:?}", duration);
+
+//     r
+// }
 
 fn parse_message_attributes(
     attributes: HashMap<String, MessageAttribute>,
@@ -228,56 +279,56 @@ mod deserialize_should {
     }
 }
 
-#[cfg(test)]
-mod get_database_should {
-    use super::get_database;
+// #[cfg(test)]
+// mod get_database_should {
+//     use super::get_database;
 
-    #[tokio::test]
-    #[ignore]
-    async fn establishes_connection() {
-        dotenvy::dotenv().ok();
+//     #[tokio::test]
+//     #[ignore]
+//     async fn establishes_connection() {
+//         dotenvy::dotenv().ok();
 
-        let value = get_database(std::env::var("MONGO_URI").expect("No MONGO_URI was set")).await;
+//         let value = get_database(std::env::var("MONGO_URI").expect("No MONGO_URI was set")).await;
 
-        assert!(value.is_ok());
-    }
+//         assert!(value.is_ok());
+//     }
 
-    #[tokio::test]
-    #[ignore]
-    async fn not_establish_connection() {
-        let value = get_database("some_random_string".to_string()).await;
+//     #[tokio::test]
+//     #[ignore]
+//     async fn not_establish_connection() {
+//         let value = get_database("some_random_string".to_string()).await;
 
-        assert!(value.is_err())
-    }
-}
+//         assert!(value.is_err())
+//     }
+// }
 
-#[cfg(test)]
-mod insert_vehicle_should {
-    use dotenvy::dotenv;
+// #[cfg(test)]
+// mod insert_vehicle_should {
+//     use dotenvy::dotenv;
 
-    use crate::{
-        get_database, insert_vehicles,
-        vehicle::{Random, Vehicle},
-    };
+//     use crate::{
+//         get_database, insert_vehicles,
+//         vehicle::{Random, Vehicle},
+//     };
 
-    #[tokio::test]
-    #[ignore]
-    async fn insert_random_vehicles() {
-        dotenv().ok();
+//     #[tokio::test]
+//     #[ignore]
+//     async fn insert_random_vehicles() {
+//         dotenv().ok();
 
-        let vehicles: Vec<Vehicle> = (0..2).into_iter().map(|_| Vehicle::random()).collect();
+//         let vehicles: Vec<Vehicle> = (0..2).into_iter().map(|_| Vehicle::random()).collect();
 
-        let collection =
-            get_database(std::env::var("MONGO_URI").expect("Failed to find MONGO_URI env"))
-                .await
-                .expect("Failed to establish a db connection")
-                .collection::<Vehicle>("test_vehicle");
+//         let collection =
+//             get_database(std::env::var("MONGO_URI").expect("Failed to find MONGO_URI env"))
+//                 .await
+//                 .expect("Failed to establish a db connection")
+//                 .collection::<Vehicle>("test_vehicle");
 
-        let insert_many_result = insert_vehicles(vehicles.iter(), collection).await.unwrap();
+//         let insert_many_result = insert_vehicles(vehicles.iter(), collection).await.unwrap();
 
-        assert_eq!(insert_many_result.len(), vehicles.len());
-    }
-}
+//         assert_eq!(insert_many_result.len(), vehicles.len());
+//     }
+// }
 
 #[cfg(test)]
 mod parse_message_attributes_should {
@@ -428,8 +479,9 @@ mod serialize_insert_completed_should {
             messages: Vec::from(["successfully inserted vehicle".to_string()]),
             errors: Vec::new(),
             warnings: Vec::new(),
+            payload: None,
         };
-        let expected = "{\"id\":\"test_id\",\"success\":true,\"messages\":[\"successfully inserted vehicle\"],\"errors\":[],\"warnings\":[]}".to_string();
+        let expected = "{\"id\":\"test_id\",\"success\":true,\"payload\":null,\"messages\":[\"successfully inserted vehicle\"],\"errors\":[],\"warnings\":[]}".to_string();
 
         let result = serialize_insert_completed(message.clone()).unwrap();
 
@@ -444,9 +496,10 @@ mod serialize_insert_completed_should {
             messages: Vec::new(),
             errors: Vec::from(["Couldn't establish connection to the database".to_string()]),
             warnings: Vec::new(),
+            payload: None,
         };
 
-        let expected ="{\"id\":null,\"success\":false,\"messages\":[],\"errors\":[\"Couldn't establish connection to the database\"],\"warnings\":[]}".to_string();
+        let expected ="{\"id\":null,\"success\":false,\"payload\":null,\"messages\":[],\"errors\":[\"Couldn't establish connection to the database\"],\"warnings\":[]}".to_string();
 
         let result = serialize_insert_completed(message.clone()).unwrap();
 
@@ -461,9 +514,10 @@ mod serialize_insert_completed_should {
             messages: Vec::new(),
             errors: Vec::new(),
             warnings: Vec::from(["Car with exact same information already inserted".to_string()]),
+            payload: None,
         };
 
-        let expected = "{\"id\":\"test_id\",\"success\":true,\"messages\":[],\"errors\":[],\"warnings\":[\"Car with exact same information already inserted\"]}".to_string();
+        let expected = "{\"id\":\"test_id\",\"success\":true,\"payload\":null,\"messages\":[],\"errors\":[],\"warnings\":[\"Car with exact same information already inserted\"]}".to_string();
 
         let result = serialize_insert_completed(message.clone()).unwrap();
 
