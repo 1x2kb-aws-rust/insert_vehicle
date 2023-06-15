@@ -21,6 +21,30 @@ mod event;
 mod insert_completed_message;
 mod vehicle;
 
+async fn send_completed_message(vehicle_str: &str, source_attributes: &MessageAttributes) {
+    let (message, message_attributes) =
+        create_message_and_attributes(vehicle_str, source_attributes);
+
+    match send_insert_completed(
+        get_client(get_region()).await,
+        get_topic(),
+        message,
+        message_attributes,
+    )
+    .await
+    {
+        Ok(published_output) => {
+            println!(
+                "successfully published message {}",
+                published_output.message_id().unwrap_or_default()
+            );
+        }
+        Err(_) => {
+            println!("Failed to send message");
+        }
+    };
+}
+
 fn create_message_and_attributes(
     vehicle: &str,
     source_attributes: &MessageAttributes,
